@@ -774,7 +774,7 @@ species Collector skills: [moving] {
     
     // Take wood to pile
     reflex return_to_pile when: (!empty(carried_wood) and (
-        		current_carried_value = max_carrying_value		// At max capacity 
+        		current_carried_value >= max_carrying_value		// At max capacity 
         	or
         		targeted_wood = nil  							// Decided to return or no more wood available
     )) {
@@ -812,10 +812,14 @@ species Collector skills: [moving] {
 	        }
 	        
 	        // Add remaining wood to existing pile
-	        loop wood over: carried_wood {
-	            ask wood {
-	                location <- myself.pile_location;
-	                in_pile <- true;
+	        if (existing_pile != nil) {
+	            ask existing_pile {
+	                ask myself.carried_wood {
+	                    location <- myself.location;
+	                    in_pile <- true;
+	                }
+	                tracked_wood_pieces <- tracked_wood_pieces + myself.carried_wood;
+	                pile_value <- sum(tracked_wood_pieces collect (each.value));
 	            }
 	        }
 	        carried_wood <- [];
@@ -986,14 +990,46 @@ species WoodPile {
     float last_theft_time <- -1.0;         				   	// Time of last theft
     float stability_score <- 1.0;
     
+    list<Driftwood> tracked_wood_pieces <- [];
+    bool is_updating <- false;
+    
     // Count all wood pieces at this location
-    reflex update_pile_value {
+    reflex update_pile_value when: every(5 #cycles) {
 	    if (location = nil or dead(self)) { return; }
-	    
-	    list<Driftwood> woods_in_pile <- Driftwood at_distance 1.0  // Use spatial query
-            where (each.in_pile and each.is_collected);
+        if (is_updating) { return; }
         
-        pile_value <- sum(woods_in_pile collect (each.value));
+        is_updating <- true;
+            
+        // Get current wood pieces
+        list<Driftwood> current_wood_pieces <- Driftwood at_distance 1.0
+            where (each.in_pile and each.is_collected and !dead(each));
+        
+        // Check if the wood pieces have actually changed
+        bool wood_changed <- false;
+        if (length(current_wood_pieces) != length(tracked_wood_pieces)) {
+            wood_changed <- true;
+        } else {
+            // Check if any pieces are different
+            loop wood over: current_wood_pieces {
+                if !(tracked_wood_pieces contains wood) {
+                    wood_changed <- true;
+                    break;
+                }
+            }
+        }
+        
+        // Only update if there's an actual change
+        if (wood_changed) {
+            tracked_wood_pieces <- current_wood_pieces;
+            int new_value <- sum(tracked_wood_pieces collect (each.value));
+            
+            // Verify the new value is reasonable
+            if (new_value >= 0 and new_value <= 100) {  // Assuming 100 is a reasonable maximum
+                pile_value <- new_value;
+            }
+        }
+        
+        is_updating <- false;
 
 	}
     
@@ -1586,6 +1622,92 @@ experiment Driftwood_Simulation type: gui {
 		
 		// System Stability
 		monitor "System Stability" value: system_stability;
+		
+		
+		// Enforcement and Security Analysis
+		display "Enforcement Analysis" {
+		    chart "Authority Effectiveness" type: series position: {0, 0} size: {1.0, 0.5} {
+		        data "Active Pursuits" value: active_pursuits style: line color: #orange;
+		        data "Cumulative Catches" value: total_catches style: line color: #blue;
+		        data "Average Steal Chance" value: mean(Collector collect each.steal_chance) style: line color: #red;
+		        data "System Stability" value: system_stability style: line color: #green;
+		    }
+		    
+		    chart "Security Coverage" type: pie position: {0, 0.5} size: {1.0, 0.5} {
+		        data "Authority Coverage" 
+		            value: length(Authority) * authority_view_distance * (authority_fov/360) 
+		            color: #green;
+		        data "Camera Coverage" 
+		            value: enable_cameras ? length(SecurityCamera) * camera_detection_radius * (120/360) : 0 
+		            color: #blue;
+		        data "Uncovered Area" 
+		            value: environment_width * environment_height - 
+		                (length(Authority) * authority_view_distance * (authority_fov/360)) - 
+		                (enable_cameras ? length(SecurityCamera) * camera_detection_radius * (120/360) : 0) 
+		            color: #gray;
+		    }
+		}
+		
+		// Resource Management and Security
+		display "Resource Security" {
+		    chart "Resource Distribution" type: pie position: {0, 0} size: {1.0, 0.5} {
+		        data "Secured Resources" 
+		            value: sum(WoodPile where (each.times_stolen_from = 0) collect each.pile_value) 
+		            color: #green;
+		        data "At-Risk Resources" 
+		            value: sum(WoodPile where (each.times_stolen_from > 0) collect each.pile_value) 
+		            color: #orange;
+		        data "Uncollected Resources" 
+		            value: sum(Driftwood where (!each.is_collected) collect each.value) 
+		            color: #gray;
+		    }
+		    
+		    chart "Security Metrics" type: series position: {0, 0.5} size: {1.0, 0.5} {
+		        data "Average Pile Stability" 
+		            value: empty(WoodPile) ? 0 : mean(WoodPile collect each.stability_score) 
+		            style: line color: #green;
+		        data "Theft Success Rate" 
+		            value: empty(WoodPile) ? 0 : mean(WoodPile collect (each.times_stolen_from / max(1, cycle))) 
+		            style: line color: #red;
+		        data "Enforcement Rate" 
+		            value: total_catches / max(1, sum(Collector collect each.successful_steals)) 
+		            style: line color: #blue;
+		    }
+		}
+		
+		// Collector Behavior Analysis
+		display "Collector Behavior" {
+		    chart "Collector Activities" type: series position: {0, 0} size: {1.0, 0.5} {
+		        data "Active Collectors" value: length(Collector) style: line color: #blue;
+		        data "Collectors with Piles" value: length(Collector where each.has_pile) style: line color: #green;
+		        data "Active Thieves" value: length(Collector where each.is_stealing) style: line color: #red;
+		        data "Caught Thieves" value: length(Collector where (each.steal_chance < initial_steal_chance)) style: line color: #purple;
+		    }
+		    
+		    chart "Collection Statistics" type: series position: {0, 0.5} size: {1.0, 0.5} {
+		        data "Average Carried Value" value: mean(Collector collect each.current_carried_value) style: line color: #purple;
+		        data "Maximum Pile Value" value: empty(WoodPile) ? 0 : max(WoodPile collect each.pile_value) style: line color: #blue;
+		        data "Average Pile Value" value: empty(WoodPile) ? 0 : mean(WoodPile collect each.pile_value) style: line color: #green;
+		    }
+		}
+		
+		// System Overview
+		display "System Performance" {
+		    chart "Overall System Metrics" type: series {
+		        data "System Stability" value: system_stability style: line color: #green;
+		        data "Enforcement Effectiveness" 
+		            value: total_catches / max(1, total_catches + sum(Collector collect each.successful_steals)) 
+		            style: line color: #blue;
+		        data "Resource Security" 
+		            value: empty(WoodPile) ? 0 : 
+		                sum(WoodPile where (each.times_stolen_from = 0) collect each.pile_value) / 
+		                max(1, sum(WoodPile collect each.pile_value)) 
+		            style: line color: #purple;
+		        data "Theft Pressure" 
+		            value: mean(Collector collect each.steal_chance) 
+		            style: line color: #red;
+		    }
+		}
     }
 
 }
