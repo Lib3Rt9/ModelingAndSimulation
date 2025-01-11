@@ -1978,9 +1978,23 @@ experiment Driftwood_Simulation type: gui {
 		        data "Group Efficiency (%)" value: (world.current_group_efficiency  * 100) color: #blue;
 		        data "System Stability (%)" value: (system_stability * 100) color: #green;
 		        data "Resilience (%)" value: (system_resilience * 100) color: #yellow;
-		        data "Perturbation Level (%)" value: perturbation_active ? 
-		            (perturbation_strength * 100) : 0 color: #red;
+
+//		        data "Perturbation Level (%)" value: perturbation_active ? 
+//		            									(perturbation_strength * 100) : 0 color: #red;
+
+//				data "Group Collection Rate (%)" value: empty(Collector where each.in_group) ? 0 : 
+//		            (mean(Collector where each.in_group collect (each.collection_efficiency * 100))) 
+//		            color: #purple;
 		    }
+		    
+		}
+		
+		display "Group Status" {
+		    chart "Group Status" type: pie style: exploded {
+	           data "Stable Groups" value: length(Collector where (each.in_group and each.collection_efficiency > 0.5)) color: #green;
+	           data "Struggling Groups" value: length(Collector where (each.in_group and each.collection_efficiency <= 0.5)) color: #orange;
+	           data "Solo Collectors" value: length(Collector where !each.in_group) color: #blue;
+	       }
 		}
 		
 		display "Resource Distribution" {
@@ -1994,7 +2008,7 @@ experiment Driftwood_Simulation type: gui {
 		    }
 		}
 		
-		monitor "Perturbation Level" value: perturbation_level with_precision 2 ;
+		monitor "Perturbation Strength" value: perturbation_strength with_precision 2 ;
 		        
     }
 
