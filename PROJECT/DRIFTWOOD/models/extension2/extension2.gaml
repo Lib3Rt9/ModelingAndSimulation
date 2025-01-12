@@ -225,6 +225,7 @@ global {
 	    float theft_rate <- empty(WoodPile) ? 0 : mean(WoodPile collect each.times_stolen_from);
 	    float catch_effectiveness <- total_catches / max(1, sum(Collector collect each.successful_steals));
 	    return (1.0 - (theft_rate / 100)) * (catch_effectiveness) with_precision 2;
+	    
 	}
     
     // Cleanup dead or invalid objects
@@ -1694,7 +1695,8 @@ experiment Driftwood_Simulation type: gui {
 		// System Overview
 		display "System Performance" {
 		    chart "Overall System Metrics" type: series {
-		        data "System Stability" value: system_stability style: line color: #green;
+//		        data "System Stability" value: system_stability style: line color: #green;
+		        data "System Stability" value: system_stability / 10 style: line color: #green;
 		        data "Enforcement Effectiveness" 
 		            value: total_catches / max(1, total_catches + sum(Collector collect each.successful_steals)) 
 		            style: line color: #blue;
