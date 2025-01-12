@@ -1630,7 +1630,7 @@ experiment Driftwood_Simulation type: gui {
 		        data "Active Pursuits" value: active_pursuits style: line color: #orange;
 		        data "Cumulative Catches" value: total_catches style: line color: #blue;
 		        data "Average Steal Chance" value: mean(Collector collect each.steal_chance) style: line color: #red;
-		        data "System Stability" value: system_stability style: line color: #green;
+//		        data "System Stability" value: system_stability style: line color: #green;
 		    }
 		    
 		    chart "Security Coverage" type: pie position: {0, 0.5} size: {1.0, 0.5} {
@@ -1680,7 +1680,7 @@ experiment Driftwood_Simulation type: gui {
 		    chart "Collector Activities" type: series position: {0, 0} size: {1.0, 0.5} {
 		        data "Active Collectors" value: length(Collector) style: line color: #blue;
 		        data "Collectors with Piles" value: length(Collector where each.has_pile) style: line color: #green;
-		        data "Active Thieves" value: length(Collector where each.is_stealing) style: line color: #red;
+//		        data "Active Thieves" value: length(Collector where each.is_stealing) style: line color: #red;
 		        data "Caught Thieves" value: length(Collector where (each.steal_chance < initial_steal_chance)) style: line color: #purple;
 		    }
 		    
