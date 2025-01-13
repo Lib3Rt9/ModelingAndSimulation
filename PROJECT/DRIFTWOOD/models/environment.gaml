@@ -12,7 +12,7 @@ model Driftwood
 global {
     // Define the dimensions of the environment
     int environment_width <- 100;
-    int environment_height <- 50;
+    int environment_height <- 100;
     
     // Fixed boundaries - adjusted for more realistic proportions
     int sea_width <- int(environment_width * 0.2);    	// 20% for deeper water
@@ -48,6 +48,19 @@ global {
     // Wet sand parameters
     float wet_sand_duration <- 500.0;  		// How long the sand stays wet
     
+    int initial_wood_number <- 20;      	// Number of wood pieces at start
+    float wood_spawn_rate <- 0.02;      	// Probability of spawning wood per step
+    
+    init {
+    	 create Driftwood number: initial_wood_number {
+            // Place wood in the sea near the tidal zone
+            float spawn_x <- float(rnd(sea_width - 5.0, sea_width));
+//            write "Height range: 0 to " + (environment_height - 1);
+            float spawn_y <- rnd(0.0, environment_height - 1.0);  // Subtract 1 to stay within bounds
+            location <- {spawn_x, spawn_y};
+//            write "Created wood at: (" + spawn_x + ", " + spawn_y + ")";
+        }
+    }
 
     reflex update_time {
         simulation_time <- simulation_time + wave_speed;
@@ -87,6 +100,16 @@ global {
 	    }
 	}
 	
+	// Wood generation
+    reflex generate_wood {
+        if (flip(wood_spawn_rate)) {
+            create Driftwood number: 1 {
+                float spawn_x <- float(rnd(sea_width - 5.0, sea_width));
+                float spawn_y <- rnd(0.0, environment_height - 1.0);
+                location <- {spawn_x, spawn_y};
+            }
+        }
+    }
 	
 }
 
@@ -172,7 +195,111 @@ grid Beach_Cell width: environment_width height: environment_height {
 }
 
 
+species Driftwood {
+    string size_category;
+    float width;											// wood width
+    float height;											// wood height
+    int value;												// wood weight
+    
+    rgb wood_color <- rgb(139,69,19);  						// Brown color for wood
+    
+    float rotation <- rnd(360.0);  							// Random initial rotation
+    float rotation_speed <- rnd(0.2, 0.9);  				// Random rotation speed between 0.2 and 0.9 degrees per step
+    
+    bool is_collected <- false;								// wood status
+    bool in_pile <- false;									// wood status
+    
+    init {
+        // Randomly assign size class
+        size_category <- one_of(["small", "medium", "large"]);
+        switch size_category { 
+            match "small" { 
+                width <- 0.8; 
+                height <- 0.4; 
+                value <- 1;
+            } 
+            match "medium" { 
+                width <- 1.2; 
+                height <- 0.6; 
+                value <- 3;
+            } 
+            match "large" { 
+                width <- 1.6; 
+                height <- 0.8;
+                value <- 5;
+            } 
+        }
+    }
+    
+    aspect default {
+        // Only draw wood that is not collected
+        if (!is_collected) {
+	        draw rectangle(width, height) color: wood_color rotate: rotation;
+	        
+        } else {
+            // Only draw if it's in a pile (on the beach)
+            if (in_pile) {
+                draw rectangle(width, height) color: wood_color rotate: rotation;
+            }
+        }
+    }
+    
+    reflex rotate when: !is_collected {
+        rotation <- rotation + rotation_speed;
+        if (rotation >= 360.0) { rotation <- 0.0; }
+    }
+    
+    reflex move when: !is_collected and !in_pile {
+        Beach_Cell current_cell <- Beach_Cell(location);
+        
+        if (current_cell != nil) {
+            // Only move if in water
+            if (current_cell.color = current_cell.sea_color or current_cell.color = current_cell.shallow_water_color) {
+				// Determine tide direction based on current time period
+                bool is_tide_rising <- (day_time >= 0.0 and day_time < 6.0) or (day_time >= 12.0 and day_time < 18.0);
+                
+                float tide_movement <- 0.0;
+                float size_factor;
+//                float wave_factor;
+                                
 
+                // Set movement factor based on wood size
+                switch size_category { 
+                    match "small" { 
+                        size_factor <- is_tide_rising 
+                            ? 60.0  						// Rising tide
+                            : 30.0;  						// Falling tide
+                    } 
+                    match "medium" { 
+                        size_factor <- is_tide_rising
+                            ? 50.0  						// Rising tide
+                            : 20.0;  						// Falling tide
+                    } 
+                    match "large" { 
+                        size_factor <- is_tide_rising
+                            ? 40.0  						// Rising tide
+                            : 10.0;  						// Falling tide
+                    } 
+                }
+                
+	            
+                // Calculate base movement direction based on tide
+                tide_movement <- is_tide_rising 
+                    ? tide_speed * size_factor        		// Tide rising - move toward beach
+                    : -tide_speed * size_factor;      		// Tide falling - move toward sea
+                
+                
+				float wave_factor <- size_category = "small" ? 0.020 : (size_category = "medium" ? 0.015 : 0.010);
+                float wave_influence <- sin(simulation_time + location.y * wave_frequency) * wave_factor;
+            	location <- location + {tide_movement + wave_influence, 0};
+	                
+
+            }
+        }
+    }
+            // If no water, wood stays in place (simply don't move it)
+            
+}
 
 
 
@@ -192,11 +319,15 @@ experiment Driftwood_Simulation type: gui {
     
     parameter "Time Speed" var: time_speed min: 0.005 max: 0.05;
 
-    
+    // Wood
+	parameter "Initial Wood Number" var: initial_wood_number min: 5 max: 50;
+    parameter "Wood Spawn Rate" var: wood_spawn_rate min: 0.01 max: 1.0;
     
     output {
         display main_display {
             grid Beach_Cell;
+            
+            species Driftwood;
             
             
             // Time and tide information
